@@ -1,13 +1,20 @@
-import json
 import os
 import random
+import logging
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# Конфигурация
+# Настройка логирования
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Конфигурация (используем переменные окружения)
 TOKEN = os.getenv("BOT_TOKEN")
 
 # Категории идиом с эмодзи
@@ -19,6 +26,8 @@ CATEGORIES = {
     "communication": "💬 Communication - общение и разговор",
     "all": "🌈 All - все категории"
 }
+
+# ============ ВСТРОЕННЫЕ ДАННЫЕ ИДИОМ ============
 ALL_IDIOMS_DATA = {
     "business": [
         {
@@ -1401,17 +1410,12 @@ ALL_IDIOMS_DATA = {
         }
     ]
 }
-# Структура для хранения статистики пользователей
-user_stats = defaultdict(lambda: {
-    'studied': set(),  # изученные идиомы (по названию)
-    'correct': 0,
-    'total': 0,
-    'mistakes': set(),  # идиомы, где были ошибки
-    'by_category': defaultdict(lambda: {'studied': 0, 'total': 0})
-})
 
-# Загрузка всех идиом из JSON файлов
-# Загрузка всех идиом из встроенных данных
+# Глобальная переменная со всеми идиомами
+ALL_IDIOMS = {}
+
+# ============ ФУНКЦИИ ЗАГРУЗКИ ДАННЫХ ============
+
 def load_all_idioms() -> Dict[str, List[Dict]]:
     """Загружает идиомы из встроенных данных"""
     print("📦 Загрузка идиом из встроенных данных...")
@@ -1443,11 +1447,20 @@ def load_all_idioms() -> Dict[str, List[Dict]]:
     
     print(f"📊 Всего идиом: {total_all}")
     
-    return all_idioms  # ВСЕ! Больше ничего не добавлять!
-# Глобальная переменная со всеми идиомами
-ALL_IDIOMS = load_all_idioms()
+    return all_idioms
 
-# Получение списка идиом для пользователя
+# ============ СТАТИСТИКА ПОЛЬЗОВАТЕЛЕЙ ============
+
+user_stats = defaultdict(lambda: {
+    'studied': set(),  # изученные идиомы (по названию)
+    'correct': 0,
+    'total': 0,
+    'mistakes': set(),  # идиомы, где были ошибки
+    'by_category': defaultdict(lambda: {'studied': 0, 'total': 0})
+})
+
+# ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
+
 def get_idioms_for_user(user_id: int, category: str, mode: str = "study") -> List[Dict]:
     if category not in ALL_IDIOMS:
         return []
@@ -1471,7 +1484,6 @@ def get_idioms_for_user(user_id: int, category: str, mode: str = "study") -> Lis
         studied = user_stats[user_id]['studied']
         return [idiom for idiom in idioms if idiom['idiom'] in studied]
 
-# Создание вопроса
 def create_question(user_id: int, category: str, mode: str = "study", 
                    direction: str = "en_to_ru") -> Tuple[Optional[str], Optional[List[str]], Optional[str], Optional[str]]:
     idioms = get_idioms_for_user(user_id, category, mode)
@@ -1524,20 +1536,15 @@ def create_question(user_id: int, category: str, mode: str = "study",
     
     return question, choices, correct_answer, explanation
 
-# Создание клавиатуры с вариантами ответов
 def create_keyboard(choices: List[str]) -> InlineKeyboardMarkup:
     keyboard = []
-    for i, choice in enumerate(choices):  # ТОЛЬКО ЭТО
+    for i, choice in enumerate(choices):
         display_text = choice[:35] + "..." if len(choice) > 35 else choice
         keyboard.append([InlineKeyboardButton(display_text, callback_data=str(i))])
     return InlineKeyboardMarkup(keyboard)
 
-# Клавиатура выбора категории
 def create_category_keyboard(mode: str = "study") -> InlineKeyboardMarkup:
     keyboard = []
-    
-    # Текст для заголовка
-    mode_text = "изучения" if mode == "study" else "повторения"
     
     # Создаем кнопки для всех категорий
     for category_key, category_name in CATEGORIES.items():
@@ -1548,7 +1555,8 @@ def create_category_keyboard(mode: str = "study") -> InlineKeyboardMarkup:
     
     return InlineKeyboardMarkup(keyboard)
 
-# Команда /start
+# ============ ОБРАБОТЧИКИ КОМАНД ============
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
@@ -1577,7 +1585,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(welcome_text, parse_mode='Markdown')
 
-# Команда /study
 async def study(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = """
 📖 *Режим изучения*
@@ -1597,7 +1604,6 @@ async def study(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=create_category_keyboard("study")
     )
 
-# Команда /review
 async def review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
@@ -1630,7 +1636,117 @@ async def review(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=create_category_keyboard("review")
     )
 
-# Обработка выбора категории
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    stats_data = user_stats[user_id]
+    total_idioms = len(ALL_IDIOMS["all"])
+    studied_count = len(stats_data['studied'])
+    
+    if stats_data['total'] > 0:
+        accuracy = (stats_data['correct'] / stats_data['total']) * 100
+        if accuracy >= 80:
+            accuracy_emoji = "🔥"
+        elif accuracy >= 60:
+            accuracy_emoji = "⭐"
+        else:
+            accuracy_emoji = "📈"
+    else:
+        accuracy = 0
+        accuracy_emoji = "📊"
+    
+    # Прогресс-бар
+    progress_percent = (studied_count / total_idioms * 100) if total_idioms > 0 else 0
+    filled = int(progress_percent / 10)
+    progress_bar = "▓" * filled + "░" * (10 - filled)
+    
+    # Статистика по категориям
+    category_stats = []
+    for cat_key, cat_name in CATEGORIES.items():
+        if cat_key == "all":
+            continue
+        
+        total_in_cat = len(ALL_IDIOMS.get(cat_key, []))
+        studied_in_cat = stats_data['by_category'][cat_key]['studied']
+        
+        if total_in_cat > 0:
+            percentage = (studied_in_cat / total_in_cat) * 100
+            if percentage == 100:
+                emoji = "🎯"
+            elif percentage >= 50:
+                emoji = "✅"
+            else:
+                emoji = "📚"
+            
+            category_stats.append(f"{emoji} {cat_name}: {studied_in_cat}/{total_in_cat}")
+    
+    message = f"""
+📊 *Ваша статистика*
+
+🎯 *Общий прогресс:*
+{progress_bar} {progress_percent:.0f}%
+{studied_count} из {total_idioms} идиом изучено
+
+{accuracy_emoji} *Точность ответов:*
+{stats_data['correct']} из {stats_data['total']} правильных
+({accuracy:.1f}%)
+
+📁 *Прогресс по категориям:*
+{chr(10).join(category_stats)}
+
+💡 *Совет:* Продолжайте в том же духе!
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("🎯 Продолжить изучение", callback_data="change_category")],
+        [InlineKeyboardButton("🔄 Повторить изученное", callback_data="review_menu")]
+    ]
+    
+    await update.message.reply_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = """
+❓ *Помощь и инструкции*
+
+🎯 *Как работает бот:*
+1. Выберите команду /study для изучения новых идиом
+2. Выберите команду /review для повторения изученных
+3. Отвечайте на вопросы, выбирая правильный вариант
+4. Следите за своим прогрессом с помощью /stats
+
+📚 *Типы вопросов:*
+• 🇬🇧 → 🇷🇺 *Английская идиома* → *русский перевод*
+• 🇷🇺 → 🇬🇧 *Русский перевод* → *английская идиома*
+
+📁 *Категории идиом:*
+🏢 Business - деловые идиомы
+🏠 Everyday - повседневные выражения  
+😊 Emotions - эмоции и характер
+⚡ Quick & Easy - простые и частые
+💬 Communication - общение и разговор
+🌈 All - все категории смешанно
+
+💡 *Советы для эффективного обучения:*
+• Начинайте с конкретных категорий
+• Регулярно повторяйте изученное
+• Не бойтесь ошибаться - ошибки помогают учиться!
+• Используйте примеры для лучшего запоминания
+
+📊 *Статистика показывает:*
+• Общий прогресс изучения
+• Точность ваших ответов
+• Прогресс по каждой категории
+
+Удачи в изучении английских идиом! 🎓
+"""
+    
+    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+# ============ ОБРАБОТЧИКИ CALLBACK ============
+
 async def handle_category_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1698,7 +1814,6 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
         reply_markup=create_keyboard(choices)
     )
 
-# Обработка ответов
 async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1788,7 +1903,6 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# Обработка кнопок продолжения
 async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1797,7 +1911,37 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     
     if data == "show_stats":
-        await show_stats_inline(query, user_id)
+        # Показываем статистику
+        stats_data = user_stats[user_id]
+        total_idioms = len(ALL_IDIOMS["all"])
+        studied_count = len(stats_data['studied'])
+        
+        if stats_data['total'] > 0:
+            accuracy = (stats_data['correct'] / stats_data['total']) * 100
+        else:
+            accuracy = 0
+        
+        progress_percent = (studied_count / total_idioms * 100) if total_idioms > 0 else 0
+        filled = int(progress_percent / 10)
+        progress_bar = "▓" * filled + "░" * (10 - filled)
+        
+        message = f"""
+📊 *Ваша статистика*
+
+🎯 *Общий прогресс:*
+{progress_bar} {progress_percent:.0f}%
+{studied_count} из {total_idioms} идиом изучено
+
+📈 *Точность ответов:*
+{stats_data['correct']} из {stats_data['total']} правильных
+({accuracy:.1f}%)
+"""
+        
+        keyboard = [
+            [InlineKeyboardButton("➡️ Продолжить", callback_data="change_category")]
+        ]
+        await query.edit_message_text(message, parse_mode='Markdown', 
+                                     reply_markup=InlineKeyboardMarkup(keyboard))
         return
     elif data == "change_category":
         # Возвращаем к выбору категории
@@ -1873,144 +2017,27 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=create_keyboard(choices)
     )
 
-# Показать статистику (inline)
-async def show_stats_inline(query, user_id: int):
-    stats = user_stats[user_id]
-    total_idioms = len(ALL_IDIOMS["all"])
-    studied_count = len(stats['studied'])
-    
-    if stats['total'] > 0:
-        accuracy = (stats['correct'] / stats['total']) * 100
-        if accuracy >= 80:
-            accuracy_emoji = "🔥"
-        elif accuracy >= 60:
-            accuracy_emoji = "⭐"
-        else:
-            accuracy_emoji = "📈"
-    else:
-        accuracy = 0
-        accuracy_emoji = "📊"
-    
-    # Прогресс-бар
-    progress_percent = (studied_count / total_idioms * 100) if total_idioms > 0 else 0
-    filled = int(progress_percent / 10)
-    progress_bar = "▓" * filled + "░" * (10 - filled)
-    
-    # Статистика по категориям
-    category_stats = []
-    for cat_key, cat_name in CATEGORIES.items():
-        if cat_key == "all":
-            continue
-        
-        total_in_cat = len(ALL_IDIOMS.get(cat_key, []))
-        studied_in_cat = stats['by_category'][cat_key]['studied']
-        
-        if total_in_cat > 0:
-            percentage = (studied_in_cat / total_in_cat) * 100
-            if percentage == 100:
-                emoji = "🎯"
-            elif percentage >= 50:
-                emoji = "✅"
-            else:
-                emoji = "📚"
-            
-            category_stats.append(f"{emoji} {cat_name}: {studied_in_cat}/{total_in_cat}")
-    
-    message = f"""
-📊 *Ваша статистика*
+# ============ ОСНОВНАЯ ФУНКЦИЯ ============
 
-🎯 *Общий прогресс:*
-{progress_bar} {progress_percent:.0f}%
-{studied_count} из {total_idioms} идиом изучено
-
-{accuracy_emoji} *Точность ответов:*
-{stats['correct']} из {stats['total']} правильных
-({accuracy:.1f}%)
-
-📁 *Прогресс по категориям:*
-{chr(10).join(category_stats)}
-
-💡 *Совет:* Продолжайте в том же духе!
-"""
-    
-    keyboard = [
-        [InlineKeyboardButton("🎯 Продолжить изучение", callback_data="change_category")],
-        [InlineKeyboardButton("🔄 Повторить изученное", callback_data="review_menu")]
-    ]
-    
-    await query.edit_message_text(
-        message,
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-# Команда /stats
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await show_stats_inline(update.message, update.effective_user.id)
-
-# Команда /help
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """
-❓ *Помощь и инструкции*
-
-🎯 *Как работает бот:*
-1. Выберите команду /study для изучения новых идиом
-2. Выберите команду /review для повторения изученных
-3. Отвечайте на вопросы, выбирая правильный вариант
-4. Следите за своим прогрессом с помощью /stats
-
-📚 *Типы вопросов:*
-• 🇬🇧 → 🇷🇺 *Английская идиома* → *русский перевод*
-• 🇷🇺 → 🇬🇧 *Русский перевод* → *английская идиома*
-
-📁 *Категории идиом:*
-🏢 Business - деловые идиомы
-🏠 Everyday - повседневные выражения  
-😊 Emotions - эмоции и характер
-⚡ Quick & Easy - простые и частые
-💬 Communication - общение и разговор
-🌈 All - все категории смешанно
-
-💡 *Советы для эффективного обучения:*
-• Начинайте с конкретных категорий
-• Регулярно повторяйте изученное
-• Не бойтесь ошибаться - ошибки помогают учиться!
-• Используйте примеры для лучшего запоминания
-
-📊 *Статистика показывает:*
-• Общий прогресс изучения
-• Точность ваших ответов
-• Прогресс по каждой категории
-
-Удачи в изучении английских идиом! 🎓
-"""
-    
-    await update.message.reply_text(help_text, parse_mode='Markdown')
-
-
-# Глобальная переменная со всеми идиомами
-ALL_IDIOMS = load_all_idioms()
-
-# Основная функция
 def main():
     print("=" * 60)
     print("🎓 Бот для изучения английских идиом")
     print("=" * 60)
     
     # Проверяем наличие токена
-    TOKEN = os.getenv("BOT_TOKEN")
     if not TOKEN:
         print("❌ ERROR: BOT_TOKEN not found in environment variables!")
         print("ℹ️ Please set BOT_TOKEN environment variable")
         return
     
+    # Загружаем идиомы
+    global ALL_IDIOMS
+    ALL_IDIOMS = load_all_idioms()
+    
     print(f"\n📊 Всего идиом: {len(ALL_IDIOMS['all'])}")
     print("=" * 60)
     
     try:
-        # ============ СОВРЕМЕННЫЙ СПОСОБ (PTB 20.x - 21.x) ============
-        # Этот код работает с версиями 20.0 и выше
-        
         # Создаем приложение
         application = Application.builder().token(TOKEN).build()
         
@@ -2039,5 +2066,6 @@ def main():
         import traceback
         traceback.print_exc()
 
+# ============ ЗАПУСК ПРОГРАММЫ ============
 if __name__ == "__main__":
     main()
