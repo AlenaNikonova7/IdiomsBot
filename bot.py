@@ -2041,52 +2041,15 @@ def main():
     global ALL_IDIOMS
     ALL_IDIOMS = load_all_idioms()
     
-    # Выводим информацию
-    total_all = 0
-    for category, idioms in ALL_IDIOMS.items():
-        if category != "all":
-            count = len(idioms)
-            total_all += count
-            category_name = CATEGORIES.get(category, category)
-            print(f"{category_name}: {count} идиом")
-    
-    print(f"\n📊 Всего идиом: {total_all}")
+    print(f"\n📊 Всего идиом: {len(ALL_IDIOMS['all'])}")
     print("=" * 60)
     
     try:
-        # УНИВЕРСАЛЬНЫЙ ЗАПУСК (работает с PTB 13.x - 20.x)
-        from telegram.ext import Updater
+        # ============ СОВРЕМЕННЫЙ СПОСОБ (PTB 20.x - 21.x) ============
+        # Этот код работает с версиями 20.0 и выше
         
-        updater = Updater(TOKEN, use_context=True)
-        dp = updater.dispatcher
-        
-        # Добавляем обработчики (адаптированные под старый стиль)
-        dp.add_handler(CommandHandler("start", start))
-        dp.add_handler(CommandHandler("study", study))
-        dp.add_handler(CommandHandler("review", review))
-        dp.add_handler(CommandHandler("stats", stats))
-        dp.add_handler(CommandHandler("help", help_command))
-        
-        # Для CallbackQueryHandler нужно использовать фильтры
-        from telegram.ext import CallbackQueryHandler, Filters
-        
-        dp.add_handler(CallbackQueryHandler(handle_category_selection, pattern="^(study|review)_"))
-        dp.add_handler(CallbackQueryHandler(handle_continue, pattern="^(continue_|change_category|show_stats|review_menu|study_menu)"))
-        dp.add_handler(CallbackQueryHandler(handle_answer))
-        
-        print("🤖 Бот запущен и готов к работе!")
-        print("=" * 60)
-        print("📱 Перейдите в Telegram и начните с команды /start")
-        print("=" * 60)
-        
-        # Запускаем бота
-        updater.start_polling()
-        updater.idle()
-        
-    except ImportError:
-        print("⚠️ PTB версия > 20.x, используем новый API")
-        # Код для версии 21.x (ваш текущий код с Application)
-        application = Application.builder().token(TOKEN).concurrent_updates(True).build()
+        # Создаем приложение
+        application = Application.builder().token(TOKEN).build()
         
         # Добавляем обработчики команд
         application.add_handler(CommandHandler("start", start))
@@ -2100,8 +2063,17 @@ def main():
         application.add_handler(CallbackQueryHandler(handle_continue, pattern="^(continue_|change_category|show_stats|review_menu|study_menu)"))
         application.add_handler(CallbackQueryHandler(handle_answer))
         
-        print("🤖 Бот запущен (PTB v21.x)!")
+        print("🤖 Бот запущен и готов к работе!")
+        print("=" * 60)
+        print("📱 Перейдите в Telegram и начните с команды /start")
+        print("=" * 60)
         
+        # Запускаем бота
         application.run_polling(drop_pending_updates=True)
+        
+    except Exception as e:
+        print(f"❌ Ошибка запуска: {e}")
+        import traceback
+        traceback.print_exc()
 if __name__ == "__main__":
     main()
