@@ -9,7 +9,6 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 
 # Конфигурация
 TOKEN = os.getenv("BOT_TOKEN")
-DATA_FOLDER = "data"
 
 # Категории идиом с эмодзи
 CATEGORIES = {
@@ -1412,35 +1411,33 @@ user_stats = defaultdict(lambda: {
 })
 
 # Загрузка всех идиом из JSON файлов
+# Загрузка всех идиом из встроенных данных
 def load_all_idioms() -> Dict[str, List[Dict]]:
-    """Загружает идиомы из встроенных данных"""
+    all_idioms = {}
     
     # Создаем копию данных, чтобы не менять оригинал
-    all_idioms = {}
-    for category, idioms in ALL_IDIOMS_DATA.items():
-        all_idioms[category] = idioms.copy()
+    for category_key in CATEGORIES:
+        if category_key == "all":
+            continue
+        
+        # Берем данные из ALL_IDIOMS_DATA
+        if category_key in ALL_IDIOMS_DATA:
+            all_idioms[category_key] = ALL_IDIOMS_DATA[category_key].copy()
+            # Добавляем поле category к каждой идиоме
+            for idiom in all_idioms[category_key]:
+                idiom['category'] = category_key
+            print(f"✅ Загружено {len(all_idioms[category_key])} идиом из категории '{category_key}'")
+        else:
+            print(f"⚠️ Категория '{category_key}' не найдена в данных!")
+            all_idioms[category_key] = []
     
     # Создаем категорию "all" со всеми идиомами
     all_idioms_list = []
     for category, idioms in all_idioms.items():
-        if category != "all":  # Пропускаем пока категорию "all"
-            for idiom in idioms:
-                # Убедимся, что категория указана
-                idiom['category'] = category
+        if category != "all":
             all_idioms_list.extend(idioms)
     
     all_idioms["all"] = all_idioms_list
-    
-    # Выводим информацию о загрузке
-    total_all = 0
-    for category, idioms in all_idioms.items():
-        if category != "all":
-            count = len(idioms)
-            total_all += count
-            category_name = CATEGORIES.get(category, category)
-            print(f"✅ Загружено {count} идиом из категории '{category_name}'")
-    
-    print(f"📊 Всего идиом: {total_all}")
     
     return all_idioms
 
@@ -1988,24 +1985,38 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 # Основная функция
-def main():
-    print("=" * 60)
-    print("🎓 Бот для изучения английских идиом")
-    print("=" * 60)
+# Загрузка всех идиом из JSON файлов
+def load_all_idioms() -> Dict[str, List[Dict]]:
+    all_idioms = {}
     
-    # Выводим информацию о загруженных данных
-    total_all = 0
-    for category, idioms in ALL_IDIOMS.items():
-        if category != "all":
-            count = len(idioms)
-            total_all += count
-            category_name = CATEGORIES.get(category, category)
-            print(f"{category_name}: {count} идиом")
+    # Загружаем каждую категорию
+    for category_key in CATEGORIES:
+        if category_key == "all":
+            continue
+            
+        filename = f"{category_key}_idioms.json"
+        filepath = os.path.join(DATA_FOLDER, filename)
+        
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    all_idioms[category_key] = json.load(f)
+                    print(f"✅ Загружено {len(all_idioms[category_key])} идиом из {filename}")
+            except Exception as e:
+                print(f"❌ Ошибка загрузки {filename}: {e}")
+                all_idioms[category_key] = []
+        else:
+            print(f"⚠️ Файл {filename} не найден!")
+            all_idioms[category_key] = []
     
-    print(f"\n📊 Всего идиом: {total_all}")
-    print("=" * 60)
-    print("🤖 Бот запущен и готов к работе!")
-    print("=" * 60)
+    # Создаем категорию "all" со всеми идиомами
+    all_idioms_list = []
+    for category, idioms in all_idioms.items():
+        for idiom in idioms:
+            idiom['category'] = category
+        all_idioms_list.extend(idioms)
+    
+    all_idioms["all"]
     
     # Создаем приложение
     application = Application.builder().token(TOKEN).build()
