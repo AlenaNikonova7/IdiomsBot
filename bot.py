@@ -1987,47 +1987,37 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Основная функция
 # Загрузка всех идиом из JSON файлов
 def load_all_idioms() -> Dict[str, List[Dict]]:
-    all_idioms = {}
+    """Загружает идиомы из встроенных данных"""
+    print("📦 Загрузка идиом из встроенных данных...")
     
-    # Загружаем каждую категорию
-    for category_key in CATEGORIES:
-        if category_key == "all":
-            continue
-            
-        filename = f"{category_key}_idioms.json"
-        filepath = os.path.join(DATA_FOLDER, filename)
-        
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    all_idioms[category_key] = json.load(f)
-                    print(f"✅ Загружено {len(all_idioms[category_key])} идиом из {filename}")
-            except Exception as e:
-                print(f"❌ Ошибка загрузки {filename}: {e}")
-                all_idioms[category_key] = []
-        else:
-            print(f"⚠️ Файл {filename} не найден!")
-            all_idioms[category_key] = []
+    # Создаем копию данных, чтобы не менять оригинал
+    all_idioms = {}
+    for category, idioms in ALL_IDIOMS_DATA.items():
+        all_idioms[category] = idioms.copy()
     
     # Создаем категорию "all" со всеми идиомами
     all_idioms_list = []
     for category, idioms in all_idioms.items():
-        for idiom in idioms:
-            idiom['category'] = category
-        all_idioms_list.extend(idioms)
+        if category != "all":  # Пропускаем пока категорию "all"
+            for idiom in idioms:
+                # Убедимся, что категория указана
+                idiom['category'] = category
+            all_idioms_list.extend(idioms)
     
-    all_idioms["all"]
+    all_idioms["all"] = all_idioms_list
     
-    # Создаем приложение
-    application = Application.builder().token(TOKEN).build()
+    # Выводим информацию о загрузке
+    total_all = 0
+    for category, idioms in all_idioms.items():
+        if category != "all":
+            count = len(idioms)
+            total_all += count
+            category_name = CATEGORIES.get(category, category)
+            print(f"✅ {category_name}: {count} идиом")
     
-    # Добавляем обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("study", study))
-    application.add_handler(CommandHandler("review", review))
-    application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("help", help_command))
+    print(f"📊 Всего идиом: {total_all}")
     
+    return all_idioms
     # Добавляем обработчики callback-запросов
     application.add_handler(CallbackQueryHandler(handle_category_selection, pattern="^(study|review)_"))
     application.add_handler(CallbackQueryHandler(handle_continue, pattern="^(continue_|change_category|show_stats|review_menu|study_menu)"))
@@ -2035,6 +2025,83 @@ def load_all_idioms() -> Dict[str, List[Dict]]:
     
     # Запускаем бота
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
+def main():
+    print("=" * 60)
+    print("🎓 Бот для изучения английских идиом")
+    print("=" * 60)
+    
+    # Проверяем наличие токена
+    TOKEN = os.getenv("BOT_TOKEN")
+    if not TOKEN:
+        print("❌ ERROR: BOT_TOKEN not found in environment variables!")
+        print("ℹ️ Please set BOT_TOKEN environment variable")
+        return
+    
+    # Загружаем идиомы
+    global ALL_IDIOMS
+    ALL_IDIOMS = load_all_idioms()
+    
+    # Выводим информацию
+    total_all = 0
+    for category, idioms in ALL_IDIOMS.items():
+        if category != "all":
+            count = len(idioms)
+            total_all += count
+            category_name = CATEGORIES.get(category, category)
+            print(f"{category_name}: {count} идиом")
+    
+    print(f"\n📊 Всего идиом: {total_all}")
+    print("=" * 60)
+    
+    try:
+        # УНИВЕРСАЛЬНЫЙ ЗАПУСК (работает с PTB 13.x - 20.x)
+        from telegram.ext import Updater
+        
+        updater = Updater(TOKEN, use_context=True)
+        dp = updater.dispatcher
+        
+        # Добавляем обработчики (адаптированные под старый стиль)
+        dp.add_handler(CommandHandler("start", start))
+        dp.add_handler(CommandHandler("study", study))
+        dp.add_handler(CommandHandler("review", review))
+        dp.add_handler(CommandHandler("stats", stats))
+        dp.add_handler(CommandHandler("help", help_command))
+        
+        # Для CallbackQueryHandler нужно использовать фильтры
+        from telegram.ext import CallbackQueryHandler, Filters
+        
+        dp.add_handler(CallbackQueryHandler(handle_category_selection, pattern="^(study|review)_"))
+        dp.add_handler(CallbackQueryHandler(handle_continue, pattern="^(continue_|change_category|show_stats|review_menu|study_menu)"))
+        dp.add_handler(CallbackQueryHandler(handle_answer))
+        
+        print("🤖 Бот запущен и готов к работе!")
+        print("=" * 60)
+        print("📱 Перейдите в Telegram и начните с команды /start")
+        print("=" * 60)
+        
+        # Запускаем бота
+        updater.start_polling()
+        updater.idle()
+        
+    except ImportError:
+        print("⚠️ PTB версия > 20.x, используем новый API")
+        # Код для версии 21.x (ваш текущий код с Application)
+        application = Application.builder().token(TOKEN).concurrent_updates(True).build()
+        
+        # Добавляем обработчики команд
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("study", study))
+        application.add_handler(CommandHandler("review", review))
+        application.add_handler(CommandHandler("stats", stats))
+        application.add_handler(CommandHandler("help", help_command))
+        
+        # Добавляем обработчики callback-запросов
+        application.add_handler(CallbackQueryHandler(handle_category_selection, pattern="^(study|review)_"))
+        application.add_handler(CallbackQueryHandler(handle_continue, pattern="^(continue_|change_category|show_stats|review_menu|study_menu)"))
+        application.add_handler(CallbackQueryHandler(handle_answer))
+        
+        print("🤖 Бот запущен (PTB v21.x)!")
+        
+        application.run_polling(drop_pending_updates=True)
 if __name__ == "__main__":
     main()
