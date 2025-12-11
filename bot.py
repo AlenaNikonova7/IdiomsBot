@@ -8,7 +8,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # Конфигурация
-TOKEN = "8517190904:AAG3pTtwOAM_gsN763ONYMfP49n2oRFTrV0"
+TOKEN = os.getenv("BOT_TOKEN")
 DATA_FOLDER = "data"
 
 # Категории идиом с эмодзи
