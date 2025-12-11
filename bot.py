@@ -1413,34 +1413,37 @@ user_stats = defaultdict(lambda: {
 # Загрузка всех идиом из JSON файлов
 # Загрузка всех идиом из встроенных данных
 def load_all_idioms() -> Dict[str, List[Dict]]:
-    all_idioms = {}
+    """Загружает идиомы из встроенных данных"""
+    print("📦 Загрузка идиом из встроенных данных...")
     
     # Создаем копию данных, чтобы не менять оригинал
-    for category_key in CATEGORIES:
-        if category_key == "all":
-            continue
-        
-        # Берем данные из ALL_IDIOMS_DATA
-        if category_key in ALL_IDIOMS_DATA:
-            all_idioms[category_key] = ALL_IDIOMS_DATA[category_key].copy()
-            # Добавляем поле category к каждой идиоме
-            for idiom in all_idioms[category_key]:
-                idiom['category'] = category_key
-            print(f"✅ Загружено {len(all_idioms[category_key])} идиом из категории '{category_key}'")
-        else:
-            print(f"⚠️ Категория '{category_key}' не найдена в данных!")
-            all_idioms[category_key] = []
+    all_idioms = {}
+    for category, idioms in ALL_IDIOMS_DATA.items():
+        all_idioms[category] = idioms.copy()
     
     # Создаем категорию "all" со всеми идиомами
     all_idioms_list = []
     for category, idioms in all_idioms.items():
-        if category != "all":
+        if category != "all":  # Пропускаем пока категорию "all"
+            for idiom in idioms:
+                # Убедимся, что категория указана
+                idiom['category'] = category
             all_idioms_list.extend(idioms)
     
     all_idioms["all"] = all_idioms_list
     
-    return all_idioms
-
+    # Выводим информацию о загрузке
+    total_all = 0
+    for category, idioms in all_idioms.items():
+        if category != "all":
+            count = len(idioms)
+            total_all += count
+            category_name = CATEGORIES.get(category, category)
+            print(f"✅ {category_name}: {count} идиом")
+    
+    print(f"📊 Всего идиом: {total_all}")
+    
+    return all_idioms  # ВСЕ! Больше ничего не добавлять!
 # Глобальная переменная со всеми идиомами
 ALL_IDIOMS = load_all_idioms()
 
@@ -1984,47 +1987,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
+
+# Глобальная переменная со всеми идиомами
+ALL_IDIOMS = load_all_idioms()
+
 # Основная функция
-# Загрузка всех идиом из JSON файлов
-def load_all_idioms() -> Dict[str, List[Dict]]:
-    """Загружает идиомы из встроенных данных"""
-    print("📦 Загрузка идиом из встроенных данных...")
-    
-    # Создаем копию данных, чтобы не менять оригинал
-    all_idioms = {}
-    for category, idioms in ALL_IDIOMS_DATA.items():
-        all_idioms[category] = idioms.copy()
-    
-    # Создаем категорию "all" со всеми идиомами
-    all_idioms_list = []
-    for category, idioms in all_idioms.items():
-        if category != "all":  # Пропускаем пока категорию "all"
-            for idiom in idioms:
-                # Убедимся, что категория указана
-                idiom['category'] = category
-            all_idioms_list.extend(idioms)
-    
-    all_idioms["all"] = all_idioms_list
-    
-    # Выводим информацию о загрузке
-    total_all = 0
-    for category, idioms in all_idioms.items():
-        if category != "all":
-            count = len(idioms)
-            total_all += count
-            category_name = CATEGORIES.get(category, category)
-            print(f"✅ {category_name}: {count} идиом")
-    
-    print(f"📊 Всего идиом: {total_all}")
-    
-    return all_idioms
-    # Добавляем обработчики callback-запросов
-    application.add_handler(CallbackQueryHandler(handle_category_selection, pattern="^(study|review)_"))
-    application.add_handler(CallbackQueryHandler(handle_continue, pattern="^(continue_|change_category|show_stats|review_menu|study_menu)"))
-    application.add_handler(CallbackQueryHandler(handle_answer))
-    
-    # Запускаем бота
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
 def main():
     print("=" * 60)
     print("🎓 Бот для изучения английских идиом")
@@ -2036,10 +2003,6 @@ def main():
         print("❌ ERROR: BOT_TOKEN not found in environment variables!")
         print("ℹ️ Please set BOT_TOKEN environment variable")
         return
-    
-    # Загружаем идиомы
-    global ALL_IDIOMS
-    ALL_IDIOMS = load_all_idioms()
     
     print(f"\n📊 Всего идиом: {len(ALL_IDIOMS['all'])}")
     print("=" * 60)
@@ -2075,5 +2038,6 @@ def main():
         print(f"❌ Ошибка запуска: {e}")
         import traceback
         traceback.print_exc()
+
 if __name__ == "__main__":
     main()
