@@ -1902,7 +1902,59 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+async def create_next_question(query, context, user_id, category):
+    """Создает следующий вопрос"""
+    mode = context.user_data.get('current_mode', 'study')
+    direction = random.choice(['en_to_ru', 'ru_to_en'])
+    category_name = CATEGORIES.get(category, 'Все категории')
+    
+    question, choices, correct_answer, explanation = create_question(
+        user_id, category, mode, direction
+    )
+    
+    if not question:
+        if mode == "study":
+            message = f"""
+🎉 *Поздравляем!*
 
+Вы успешно изучили *все идиомы* в категории:
+{category_name}
+
+Выберите другую категорию или перейдите в режим /review для повторения!
+"""
+        else:
+            message = f"""
+📝 *Пока нет изученных идиом*
+
+В категории {category_name} пока нет изученных идиом.
+
+Начните изучение с команды /study!
+"""
+        
+        keyboard = [
+            [InlineKeyboardButton("📁 Выбрать категорию", callback_data="change_category")],
+            [InlineKeyboardButton("📊 Моя статистика", callback_data="show_stats")]
+        ]
+        await query.edit_message_text(message, parse_mode='Markdown', 
+                                     reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    
+    # Сохраняем данные
+    context.user_data['correct_answer'] = correct_answer
+    context.user_data['current_direction'] = direction
+    context.user_data['current_explanation'] = explanation
+    context.user_data['current_choices'] = choices
+    context.user_data['current_category'] = category
+    context.user_data['current_category_name'] = category_name
+    
+    # Показываем иконку направления
+    direction_icon = "🇬🇧 → 🇷🇺" if direction == "en_to_ru" else "🇷🇺 → 🇬🇧"
+    
+    await query.edit_message_text(
+        f"{question}\n\n{direction_icon}",
+        parse_mode='Markdown',
+        reply_markup=create_keyboard(choices)
+    )
 async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -2049,9 +2101,22 @@ def main():
         application.add_handler(CommandHandler("help", help_command))
         
         # Добавляем обработчики callback-запросов
-        application.add_handler(CallbackQueryHandler(handle_category_selection, pattern="^(study|review)_"))
-        application.add_handler(CallbackQueryHandler(handle_continue, pattern="^(continue_|change_category|show_stats|review_menu|study_menu)"))
-        application.add_handler(CallbackQueryHandler(handle_answer))
+            # Добавляем обработчики callback-запросов
+    # ЗАМЕНИТЕ существующие 3 строки на эти 3:
+        application.add_handler(CallbackQueryHandler(
+            handle_category_selection, 
+            pattern=r"^(study|review)_[a-z]+$"
+        ))
+    
+        application.add_handler(CallbackQueryHandler(
+            handle_continue,
+            pattern=r"^(continue_|change_category|show_stats|resume_learning)"
+        ))
+    
+        application.add_handler(CallbackQueryHandler(
+            handle_answer,
+            pattern=r"^\d+$"  # Только цифры для ответов
+        ))
         
         print("🤖 Бот запущен и готов к работе!")
         print("=" * 60)
