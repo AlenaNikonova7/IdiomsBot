@@ -17,6 +17,25 @@ logger = logging.getLogger(__name__)
 # Конфигурация (используем переменные окружения)
 TOKEN = os.getenv("BOT_TOKEN")
 
+# Если токен не найден в переменных окружения, попробуем прочитать из .env файла
+if not TOKEN:
+    try:
+        # Попытка загрузить из .env файла напрямую
+        with open('.env', 'r') as f:
+            for line in f:
+                if line.strip() and not line.startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    if key == 'BOT_TOKEN':
+                        TOKEN = value
+                        break
+    except FileNotFoundError:
+        pass
+
+if not TOKEN:
+    logger.error("❌ BOT_TOKEN not found!")
+    # Не падаем сразу, возможно, токен будет задан позже
+    TOKEN = ""
+
 # Категории идиом с эмодзи
 CATEGORIES = {
     "business": "🏢 Business - деловые идиомы",
@@ -28,6 +47,8 @@ CATEGORIES = {
 }
 
 # ============ ВСТРОЕННЫЕ ДАННЫЕ ИДИОМ ============
+# ВСТАВЬТЕ СЮДА ВЕСЬ ВАШ КОД С ИДИОМАМИ БЕЗ ИЗМЕНЕНИЙ
+# ALL_IDIOMS_DATA = { ... }
 ALL_IDIOMS_DATA = {
     "business": [
         {
@@ -1410,7 +1431,6 @@ ALL_IDIOMS_DATA = {
         }
     ]
 }
-
 # Глобальная переменная со всеми идиомами
 ALL_IDIOMS = {}
 
@@ -1754,7 +1774,21 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
     user_id = query.from_user.id
     data = query.data
     
-    mode, category = data.split("_", 1)
+    try:
+        if "_" not in data:
+            await query.edit_message_text("❌ Неверный выбор")
+            return
+        
+        mode, category = data.split("_", 1)
+        
+        if mode not in ["study", "review"] or category not in CATEGORIES:
+            await query.edit_message_text("❌ Неверный выбор категории")
+            return
+    except Exception as e:
+        logger.error(f"Error parsing callback data: {e}")
+        await query.edit_message_text("❌ Ошибка обработки запроса")
+        return
+    
     category_name = CATEGORIES.get(category, "Все категории")
     
     # Сохраняем выбранную категорию и режим
@@ -1805,8 +1839,7 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
     direction_icon = "🇬🇧 → 🇷🇺" if direction == "en_to_ru" else "🇷🇺 → 🇬🇧"
     
     # Добавляем счетчик вопросов
-    question_number = context.user_data.get('question_count', 1)
-    context.user_data['question_count'] = question_number + 1
+    context.user_data['question_count'] = 1
     
     await query.edit_message_text(
         f"{question}\n\n{direction_icon}",
@@ -1819,7 +1852,12 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     user_id = query.from_user.id
-    choice_index = int(query.data)
+    
+    try:
+        choice_index = int(query.data)
+    except ValueError:
+        await query.edit_message_text("❌ Ошибка в данных")
+        return
     
     # Получаем данные из контекста
     correct_answer = context.user_data.get('correct_answer')
@@ -1830,8 +1868,8 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     direction = context.user_data.get('current_direction', 'en_to_ru')
     category_name = context.user_data.get('current_category_name', 'Все категории')
     
-    if not correct_answer or not choices:
-        await query.edit_message_text("❌ Ошибка. Попробуйте начать заново.")
+    if not correct_answer or not choices or choice_index >= len(choices):
+        await query.edit_message_text("❌ Ошибка данных. Попробуйте начать заново.")
         return
     
     # Определяем, правильный ли ответ
@@ -1902,59 +1940,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-async def create_next_question(query, context, user_id, category):
-    """Создает следующий вопрос"""
-    mode = context.user_data.get('current_mode', 'study')
-    direction = random.choice(['en_to_ru', 'ru_to_en'])
-    category_name = CATEGORIES.get(category, 'Все категории')
-    
-    question, choices, correct_answer, explanation = create_question(
-        user_id, category, mode, direction
-    )
-    
-    if not question:
-        if mode == "study":
-            message = f"""
-🎉 *Поздравляем!*
 
-Вы успешно изучили *все идиомы* в категории:
-{category_name}
-
-Выберите другую категорию или перейдите в режим /review для повторения!
-"""
-        else:
-            message = f"""
-📝 *Пока нет изученных идиом*
-
-В категории {category_name} пока нет изученных идиом.
-
-Начните изучение с команды /study!
-"""
-        
-        keyboard = [
-            [InlineKeyboardButton("📁 Выбрать категорию", callback_data="change_category")],
-            [InlineKeyboardButton("📊 Моя статистика", callback_data="show_stats")]
-        ]
-        await query.edit_message_text(message, parse_mode='Markdown', 
-                                     reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-    
-    # Сохраняем данные
-    context.user_data['correct_answer'] = correct_answer
-    context.user_data['current_direction'] = direction
-    context.user_data['current_explanation'] = explanation
-    context.user_data['current_choices'] = choices
-    context.user_data['current_category'] = category
-    context.user_data['current_category_name'] = category_name
-    
-    # Показываем иконку направления
-    direction_icon = "🇬🇧 → 🇷🇺" if direction == "en_to_ru" else "🇷🇺 → 🇬🇧"
-    
-    await query.edit_message_text(
-        f"{question}\n\n{direction_icon}",
-        parse_mode='Markdown',
-        reply_markup=create_keyboard(choices)
-    )
 async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1989,12 +1975,14 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ({accuracy:.1f}%)
 """
         
+        current_mode = context.user_data.get('current_mode', 'study')
         keyboard = [
-            [InlineKeyboardButton("➡️ Продолжить", callback_data="change_category")]
+            [InlineKeyboardButton("➡️ Продолжить", callback_data=f"continue_{context.user_data.get('current_category', 'all')}")]
         ]
         await query.edit_message_text(message, parse_mode='Markdown', 
                                      reply_markup=InlineKeyboardMarkup(keyboard))
         return
+    
     elif data == "change_category":
         # Возвращаем к выбору категории
         current_mode = context.user_data.get('current_mode', 'study')
@@ -2006,31 +1994,36 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=create_category_keyboard(current_mode)
         )
         return
-    elif data.endswith("_menu"):
+    
+    elif data in ["review_menu", "study_menu"]:
         # Возврат в меню выбора категории
         mode = data.split("_")[0]
         await query.edit_message_text(
-            "📁 Выберите категорию:",
+            f"📁 Выберите категорию для {'изучения' if mode == 'study' else 'повторения'}:",
             parse_mode='Markdown',
             reply_markup=create_category_keyboard(mode)
         )
         return
     
-    # Продолжаем в той же категории
-    _, category = data.split("_", 1)
-    
-    mode = context.user_data.get('current_mode', 'study')
-    direction = random.choice(['en_to_ru', 'ru_to_en'])
-    
-    question, choices, correct_answer, explanation = create_question(
-        user_id, category, mode, direction
-    )
-    
-    if not question:
-        category_name = CATEGORIES.get(category, 'Все категории')
+    elif data.startswith("continue_"):
+        # Продолжаем в той же категории
+        try:
+            category = data.split("_", 1)[1]
+        except IndexError:
+            category = "all"
         
-        if mode == "study":
-            message = f"""
+        mode = context.user_data.get('current_mode', 'study')
+        direction = random.choice(['en_to_ru', 'ru_to_en'])
+        
+        question, choices, correct_answer, explanation = create_question(
+            user_id, category, mode, direction
+        )
+        
+        if not question:
+            category_name = CATEGORIES.get(category, 'Все категории')
+            
+            if mode == "study":
+                message = f"""
 🎉 *Поздравляем!*
 
 Вы успешно изучили *все идиомы* в категории:
@@ -2038,36 +2031,36 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Выберите другую категорию или перейдите в режим /review для повторения!
 """
-        else:
-            message = f"""
+            else:
+                message = f"""
 📝 *Пока нет изученных идиом*
 
 В категории {category_name} пока нет изученных идиом.
 
 Начните изучение с команды /study!
 """
+            
+            keyboard = [[InlineKeyboardButton("📁 Выбрать категорию", callback_data="change_category")]]
+            await query.edit_message_text(message, parse_mode='Markdown', 
+                                         reply_markup=InlineKeyboardMarkup(keyboard))
+            return
         
-        keyboard = [[InlineKeyboardButton("📁 Выбрать категорию", callback_data="change_category")]]
-        await query.edit_message_text(message, parse_mode='Markdown', 
-                                     reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-    
-    # Сохраняем данные
-    context.user_data['correct_answer'] = correct_answer
-    context.user_data['current_direction'] = direction
-    context.user_data['current_explanation'] = explanation
-    context.user_data['current_choices'] = choices
-    context.user_data['current_category'] = category
-    context.user_data['current_category_name'] = CATEGORIES.get(category, 'Все категории')
-    
-    # Показываем иконку направления
-    direction_icon = "🇬🇧 → 🇷🇺" if direction == "en_to_ru" else "🇷🇺 → 🇬🇧"
-    
-    await query.edit_message_text(
-        f"{question}\n\n{direction_icon}",
-        parse_mode='Markdown',
-        reply_markup=create_keyboard(choices)
-    )
+        # Сохраняем данные
+        context.user_data['correct_answer'] = correct_answer
+        context.user_data['current_direction'] = direction
+        context.user_data['current_explanation'] = explanation
+        context.user_data['current_choices'] = choices
+        context.user_data['current_category'] = category
+        context.user_data['current_category_name'] = CATEGORIES.get(category, 'Все категории')
+        
+        # Показываем иконку направления
+        direction_icon = "🇬🇧 → 🇷🇺" if direction == "en_to_ru" else "🇷🇺 → 🇬🇧"
+        
+        await query.edit_message_text(
+            f"{question}\n\n{direction_icon}",
+            parse_mode='Markdown',
+            reply_markup=create_keyboard(choices)
+        )
 
 # ============ ОСНОВНАЯ ФУНКЦИЯ ============
 
@@ -2078,7 +2071,7 @@ def main():
     
     # Проверяем наличие токена
     if not TOKEN:
-        print("❌ ERROR: BOT_TOKEN not found in environment variables!")
+        print("❌ ERROR: BOT_TOKEN not found!")
         print("ℹ️ Please set BOT_TOKEN environment variable")
         return
     
@@ -2101,21 +2094,19 @@ def main():
         application.add_handler(CommandHandler("help", help_command))
         
         # Добавляем обработчики callback-запросов
-            # Добавляем обработчики callback-запросов
-    # ЗАМЕНИТЕ существующие 3 строки на эти 3:
         application.add_handler(CallbackQueryHandler(
             handle_category_selection, 
-            pattern=r"^(study|review)_[a-z]+$"
+            pattern=r"^(study|review)_"
         ))
-    
+        
         application.add_handler(CallbackQueryHandler(
             handle_continue,
-            pattern=r"^(continue_|change_category|show_stats|resume_learning)"
+            pattern=r"^(continue_|change_category|show_stats|review_menu|study_menu)"
         ))
-    
+        
         application.add_handler(CallbackQueryHandler(
             handle_answer,
-            pattern=r"^\d+$"  # Только цифры для ответов
+            pattern=r"^\d+$"
         ))
         
         print("🤖 Бот запущен и готов к работе!")
@@ -2124,7 +2115,7 @@ def main():
         print("=" * 60)
         
         # Запускаем бота
-        application.run_polling(drop_pending_updates=True)
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
         
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
