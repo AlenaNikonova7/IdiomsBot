@@ -2114,14 +2114,13 @@ def main():
         print("📱 Перейдите в Telegram и начните с команды /start")
         print("=" * 60)
         
-        # Запускаем бота
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # ЗАПУСК БОТА - ВАЖНО!
+        application.run_polling()
         
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
         import traceback
         traceback.print_exc()
-
 # ============ ЗАПУСК ПРОГРАММЫ ============
 if __name__ == "__main__":
     main()
