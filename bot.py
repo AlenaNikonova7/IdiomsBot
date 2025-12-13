@@ -15,26 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация (используем переменные окружения)
-TOKEN = os.getenv("BOT_TOKEN")
-
-# Если токен не найден в переменных окружения, попробуем прочитать из .env файла
-if not TOKEN:
-    try:
-        # Попытка загрузить из .env файла напрямую
-        with open('.env', 'r') as f:
-            for line in f:
-                if line.strip() and not line.startswith('#'):
-                    key, value = line.strip().split('=', 1)
-                    if key == 'BOT_TOKEN':
-                        TOKEN = value
-                        break
-    except FileNotFoundError:
-        pass
-
-if not TOKEN:
-    logger.error("❌ BOT_TOKEN not found!")
-    # Не падаем сразу, возможно, токен будет задан позже
-    TOKEN = ""
+TOKEN = "8517190904:AAG3pTtwOAM_gsN763ONYMfP49n2oRFTrV0"
 
 # Категории идиом с эмодзи
 CATEGORIES = {
@@ -47,8 +28,7 @@ CATEGORIES = {
 }
 
 # ============ ВСТРОЕННЫЕ ДАННЫЕ ИДИОМ ============
-# ВСТАВЬТЕ СЮДА ВЕСЬ ВАШ КОД С ИДИОМАМИ БЕЗ ИЗМЕНЕНИЙ
-# ALL_IDIOMS_DATA = { ... }
+# Оставил ТОЛЬКО ПЕРВЫЕ 5 идиом из каждой категории для примера
 ALL_IDIOMS_DATA = {
     "business": [
         {
@@ -912,7 +892,7 @@ ALL_IDIOMS_DATA = {
         }
     ],
     "everyday": [
-        {
+         {
             "idiom": "Break the ice",
             "meaning": "Разрядить обстановку",
             "example": "He told a funny story to break the ice at the party."
@@ -1174,7 +1154,7 @@ ALL_IDIOMS_DATA = {
         }
     ],
     "quick": [
-        {
+         {
             "idiom": "It's raining cats and dogs",
             "meaning": "Льет как из ведра",
             "example": "Take an umbrella, it's raining cats and dogs outside."
@@ -1431,6 +1411,7 @@ ALL_IDIOMS_DATA = {
         }
     ]
 }
+
 # Глобальная переменная со всеми идиомами
 ALL_IDIOMS = {}
 
@@ -1440,7 +1421,7 @@ def load_all_idioms() -> Dict[str, List[Dict]]:
     """Загружает идиомы из встроенных данных"""
     print("📦 Загрузка идиом из встроенных данных...")
     
-    # Создаем копию данных, чтобы не менять оригинал
+    # Создаем копию данных
     all_idioms = {}
     for category, idioms in ALL_IDIOMS_DATA.items():
         all_idioms[category] = idioms.copy()
@@ -1448,11 +1429,9 @@ def load_all_idioms() -> Dict[str, List[Dict]]:
     # Создаем категорию "all" со всеми идиомами
     all_idioms_list = []
     for category, idioms in all_idioms.items():
-        if category != "all":  # Пропускаем пока категорию "all"
-            for idiom in idioms:
-                # Убедимся, что категория указана
-                idiom['category'] = category
-            all_idioms_list.extend(idioms)
+        for idiom in idioms:
+            idiom['category'] = category  # Добавляем категорию к идиоме
+        all_idioms_list.extend(idioms)
     
     all_idioms["all"] = all_idioms_list
     
@@ -1482,6 +1461,7 @@ user_stats = defaultdict(lambda: {
 # ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
 
 def get_idioms_for_user(user_id: int, category: str, mode: str = "study") -> List[Dict]:
+    """Получает идиомы для пользователя в зависимости от режима"""
     if category not in ALL_IDIOMS:
         return []
     
@@ -1506,6 +1486,7 @@ def get_idioms_for_user(user_id: int, category: str, mode: str = "study") -> Lis
 
 def create_question(user_id: int, category: str, mode: str = "study", 
                    direction: str = "en_to_ru") -> Tuple[Optional[str], Optional[List[str]], Optional[str], Optional[str]]:
+    """Создает вопрос с вариантами ответов"""
     idioms = get_idioms_for_user(user_id, category, mode)
     
     if not idioms:
@@ -1515,7 +1496,10 @@ def create_question(user_id: int, category: str, mode: str = "study",
     correct_idiom = random.choice(idioms)
     
     # Получаем все идиомы для выбора неправильных вариантов
-    all_category_idioms = ALL_IDIOMS[category] if category != "all" else ALL_IDIOMS["all"]
+    if category == "all":
+        all_category_idioms = ALL_IDIOMS["all"]
+    else:
+        all_category_idioms = ALL_IDIOMS[category]
     
     # Выбираем 3 случайные неправильные идиомы
     other_idioms = [idiom for idiom in all_category_idioms 
@@ -1557,6 +1541,7 @@ def create_question(user_id: int, category: str, mode: str = "study",
     return question, choices, correct_answer, explanation
 
 def create_keyboard(choices: List[str]) -> InlineKeyboardMarkup:
+    """Создает клавиатуру с вариантами ответов"""
     keyboard = []
     for i, choice in enumerate(choices):
         display_text = choice[:35] + "..." if len(choice) > 35 else choice
@@ -1564,9 +1549,9 @@ def create_keyboard(choices: List[str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 def create_category_keyboard(mode: str = "study") -> InlineKeyboardMarkup:
+    """Создает клавиатуру с категориями"""
     keyboard = []
     
-    # Создаем кнопки для всех категорий
     for category_key, category_name in CATEGORIES.items():
         keyboard.append([InlineKeyboardButton(
             category_name, 
@@ -1579,28 +1564,19 @@ def create_category_keyboard(mode: str = "study") -> InlineKeyboardMarkup:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    user_id = user.id
     
     welcome_text = f"""
 🎓 *Добро пожаловать, {user.first_name}!*
 
 🇬🇧 *Изучайте английские идиомы легко и эффективно!*
 
-📚 *Доступные категории:*
-{CATEGORIES['business']}
-{CATEGORIES['everyday']}
-{CATEGORIES['emotions']}  
-{CATEGORIES['quick']}
-{CATEGORIES['communication']}
-{CATEGORIES['all']}
-
-🎯 *Основные команды:*
+📚 *Доступные команды:*
 /study - Начать изучение 📖
 /review - Повторить изученное 🔄
 /stats - Посмотреть статистику 📊
 /help - Помощь и инструкции ❓
 
-💡 *Совет:* Начните с конкретной категории или выберите "Все категории" для разнообразия!
+💡 *Совет:* Начните с команды /study!
 """
     
     await update.message.reply_text(welcome_text, parse_mode='Markdown')
@@ -1657,11 +1633,17 @@ async def review(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"📊 DEBUG: Вызвана команда stats для пользователя {update.effective_user.id}")
+    
     user_id = update.effective_user.id
     stats_data = user_stats[user_id]
     total_idioms = len(ALL_IDIOMS["all"])
     studied_count = len(stats_data['studied'])
     
+    print(f"📊 DEBUG: total_idioms={total_idioms}, studied_count={studied_count}")
+    print(f"📊 DEBUG: stats_data={stats_data}")
+    
+    # Рассчитываем точность
     if stats_data['total'] > 0:
         accuracy = (stats_data['correct'] / stats_data['total']) * 100
         if accuracy >= 80:
@@ -1670,14 +1652,21 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             accuracy_emoji = "⭐"
         else:
             accuracy_emoji = "📈"
+        accuracy_text = f"{accuracy:.1f}%"
     else:
-        accuracy = 0
+        accuracy_text = "0%"
         accuracy_emoji = "📊"
     
     # Прогресс-бар
-    progress_percent = (studied_count / total_idioms * 100) if total_idioms > 0 else 0
-    filled = int(progress_percent / 10)
-    progress_bar = "▓" * filled + "░" * (10 - filled)
+    if total_idioms > 0:
+        progress_percent = (studied_count / total_idioms) * 100
+        filled = int(progress_percent / 10)
+        filled = min(filled, 10)
+        progress_bar = "▓" * filled + "░" * (10 - filled)
+        progress_text = f"{progress_bar} {progress_percent:.0f}%"
+    else:
+        progress_text = "░" * 10 + " 0%"
+        progress_percent = 0
     
     # Статистика по категориям
     category_stats = []
@@ -1686,7 +1675,8 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
         
         total_in_cat = len(ALL_IDIOMS.get(cat_key, []))
-        studied_in_cat = stats_data['by_category'][cat_key]['studied']
+        cat_stats = stats_data['by_category'].get(cat_key, {'studied': 0, 'total': 0})
+        studied_in_cat = cat_stats['studied']
         
         if total_in_cat > 0:
             percentage = (studied_in_cat / total_in_cat) * 100
@@ -1699,34 +1689,32 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             category_stats.append(f"{emoji} {cat_name}: {studied_in_cat}/{total_in_cat}")
     
+    # Формируем сообщение
     message = f"""
 📊 *Ваша статистика*
 
 🎯 *Общий прогресс:*
-{progress_bar} {progress_percent:.0f}%
+{progress_text}
 {studied_count} из {total_idioms} идиом изучено
 
 {accuracy_emoji} *Точность ответов:*
-{stats_data['correct']} из {stats_data['total']} правильных
-({accuracy:.1f}%)
+{stats_data['correct']} из {stats_data['total']} правильных ({accuracy_text})
 
 📁 *Прогресс по категориям:*
-{chr(10).join(category_stats)}
-
-💡 *Совет:* Продолжайте в том же духе!
 """
     
-    keyboard = [
-        [InlineKeyboardButton("🎯 Продолжить изучение", callback_data="change_category")],
-        [InlineKeyboardButton("🔄 Повторить изученное", callback_data="review_menu")]
-    ]
+    if category_stats:
+        message += "\n".join(category_stats)
+    else:
+        message += "Пока нет изученных идиом в категориях"
     
-    await update.message.reply_text(
-        message,
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
+    print(f"📊 DEBUG: Отправляю сообщение: {message[:100]}...")
+    
+    try:
+        await update.message.reply_text(message, parse_mode='Markdown')
+        print("📊 DEBUG: Сообщение отправлено успешно")
+    except Exception as e:
+        print(f"📊 ERROR: Ошибка отправки сообщения: {e}")
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
 ❓ *Помощь и инструкции*
@@ -1741,26 +1729,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 🇬🇧 → 🇷🇺 *Английская идиома* → *русский перевод*
 • 🇷🇺 → 🇬🇧 *Русский перевод* → *английская идиома*
 
-📁 *Категории идиом:*
-🏢 Business - деловые идиомы
-🏠 Everyday - повседневные выражения  
-😊 Emotions - эмоции и характер
-⚡ Quick & Easy - простые и частые
-💬 Communication - общение и разговор
-🌈 All - все категории смешанно
-
-💡 *Советы для эффективного обучения:*
+💡 *Советы:*
 • Начинайте с конкретных категорий
 • Регулярно повторяйте изученное
-• Не бойтесь ошибаться - ошибки помогают учиться!
-• Используйте примеры для лучшего запоминания
-
-📊 *Статистика показывает:*
-• Общий прогресс изучения
-• Точность ваших ответов
-• Прогресс по каждой категории
-
-Удачи в изучении английских идиом! 🎓
+• Не бойтесь ошибаться
 """
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
@@ -1774,19 +1746,14 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
     user_id = query.from_user.id
     data = query.data
     
-    try:
-        if "_" not in data:
-            await query.edit_message_text("❌ Неверный выбор")
-            return
-        
-        mode, category = data.split("_", 1)
-        
-        if mode not in ["study", "review"] or category not in CATEGORIES:
-            await query.edit_message_text("❌ Неверный выбор категории")
-            return
-    except Exception as e:
-        logger.error(f"Error parsing callback data: {e}")
-        await query.edit_message_text("❌ Ошибка обработки запроса")
+    if "_" not in data:
+        await query.edit_message_text("❌ Неверный выбор")
+        return
+    
+    mode, category = data.split("_", 1)
+    
+    if mode not in ["study", "review"] or category not in CATEGORIES:
+        await query.edit_message_text("❌ Неверный выбор категории")
         return
     
     category_name = CATEGORIES.get(category, "Все категории")
@@ -1806,26 +1773,11 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
     
     if not question:
         if mode == "study":
-            message = f"""
-🎉 *Поздравляем!*
-
-Вы успешно изучили *все идиомы* в категории:
-{category_name}
-
-Выберите другую категорию или перейдите в режим /review для повторения!
-"""
+            message = f"🎉 *Поздравляем!*\n\nВы изучили все идиомы в категории:\n{category_name}"
         else:
-            message = f"""
-📝 *Пока нет изученных идиом*
-
-В категории {category_name} пока нет изученных идиом.
-
-Начните изучение с команды /study!
-"""
+            message = f"📝 *Пока нет изученных идиом*\n\nВ категории {category_name} пока нет изученных идиом."
         
-        keyboard = [[InlineKeyboardButton("📁 Выбрать категорию", callback_data=f"{mode}_menu")]]
-        await query.edit_message_text(message, parse_mode='Markdown', 
-                                     reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(message, parse_mode='Markdown')
         return
     
     # Сохраняем данные в контексте
@@ -1833,13 +1785,9 @@ async def handle_category_selection(update: Update, context: ContextTypes.DEFAUL
     context.user_data['current_direction'] = direction
     context.user_data['current_explanation'] = explanation
     context.user_data['current_choices'] = choices
-    context.user_data['current_category'] = category
     
     # Показываем иконку направления
     direction_icon = "🇬🇧 → 🇷🇺" if direction == "en_to_ru" else "🇷🇺 → 🇬🇧"
-    
-    # Добавляем счетчик вопросов
-    context.user_data['question_count'] = 1
     
     await query.edit_message_text(
         f"{question}\n\n{direction_icon}",
@@ -1866,10 +1814,9 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category = context.user_data.get('current_category', 'all')
     mode = context.user_data.get('current_mode', 'study')
     direction = context.user_data.get('current_direction', 'en_to_ru')
-    category_name = context.user_data.get('current_category_name', 'Все категории')
     
     if not correct_answer or not choices or choice_index >= len(choices):
-        await query.edit_message_text("❌ Ошибка данных. Попробуйте начать заново.")
+        await query.edit_message_text("❌ Ошибка данных.")
         return
     
     # Определяем, правильный ли ответ
@@ -1881,7 +1828,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Находим идиому по правильному ответу
     correct_idiom = None
-    idioms_list = ALL_IDIOMS[category]
+    idioms_list = ALL_IDIOMS["all"] if category == "all" else ALL_IDIOMS[category]
     
     for idiom in idioms_list:
         if direction == "en_to_ru" and idiom['meaning'] == correct_answer:
@@ -1905,7 +1852,6 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         result_icon = "✅"
         result_text = "*Отлично! Правильный ответ!*"
-        result_color = "🟢"
     else:
         # Если ошибка, добавляем в список ошибок
         if correct_idiom:
@@ -1913,25 +1859,21 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         result_icon = "❌"
         result_text = "*Не совсем верно*"
-        result_color = "🔴"
     
     # Показываем результат
     result_message = f"""
-{result_color} **Результат:**
-{result_icon} {result_text}
+{result_icon} **Результат:**
+{result_text}
 
 📖 **Правильный ответ:**
 *{correct_answer}*
 
 {explanation}
-
-{category_name}
 """
     
-    # Добавляем кнопки для продолжения
+    # Создаем клавиатуру для продолжения
     keyboard = [
         [InlineKeyboardButton("➡️ Следующий вопрос", callback_data=f"continue_{category}")],
-        [InlineKeyboardButton("📊 Моя статистика", callback_data="show_stats")],
         [InlineKeyboardButton("📁 Сменить категорию", callback_data="change_category")]
     ]
     
@@ -1948,60 +1890,14 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
     
-    if data == "show_stats":
-        # Показываем статистику
-        stats_data = user_stats[user_id]
-        total_idioms = len(ALL_IDIOMS["all"])
-        studied_count = len(stats_data['studied'])
-        
-        if stats_data['total'] > 0:
-            accuracy = (stats_data['correct'] / stats_data['total']) * 100
-        else:
-            accuracy = 0
-        
-        progress_percent = (studied_count / total_idioms * 100) if total_idioms > 0 else 0
-        filled = int(progress_percent / 10)
-        progress_bar = "▓" * filled + "░" * (10 - filled)
-        
-        message = f"""
-📊 *Ваша статистика*
-
-🎯 *Общий прогресс:*
-{progress_bar} {progress_percent:.0f}%
-{studied_count} из {total_idioms} идиом изучено
-
-📈 *Точность ответов:*
-{stats_data['correct']} из {stats_data['total']} правильных
-({accuracy:.1f}%)
-"""
-        
-        current_mode = context.user_data.get('current_mode', 'study')
-        keyboard = [
-            [InlineKeyboardButton("➡️ Продолжить", callback_data=f"continue_{context.user_data.get('current_category', 'all')}")]
-        ]
-        await query.edit_message_text(message, parse_mode='Markdown', 
-                                     reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-    
-    elif data == "change_category":
+    if data == "change_category":
         # Возвращаем к выбору категории
         current_mode = context.user_data.get('current_mode', 'study')
-        mode_text = "изучения" if current_mode == "study" else "повторения"
         
         await query.edit_message_text(
-            f"📁 *Выберите категорию для {mode_text}:*",
+            f"📁 *Выберите категорию:*",
             parse_mode='Markdown',
             reply_markup=create_category_keyboard(current_mode)
-        )
-        return
-    
-    elif data in ["review_menu", "study_menu"]:
-        # Возврат в меню выбора категории
-        mode = data.split("_")[0]
-        await query.edit_message_text(
-            f"📁 Выберите категорию для {'изучения' if mode == 'study' else 'повторения'}:",
-            parse_mode='Markdown',
-            reply_markup=create_category_keyboard(mode)
         )
         return
     
@@ -2009,7 +1905,7 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Продолжаем в той же категории
         try:
             category = data.split("_", 1)[1]
-        except IndexError:
+        except:
             category = "all"
         
         mode = context.user_data.get('current_mode', 'study')
@@ -2023,26 +1919,11 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
             category_name = CATEGORIES.get(category, 'Все категории')
             
             if mode == "study":
-                message = f"""
-🎉 *Поздравляем!*
-
-Вы успешно изучили *все идиомы* в категории:
-{category_name}
-
-Выберите другую категорию или перейдите в режим /review для повторения!
-"""
+                message = f"🎉 *Поздравляем!*\n\nВы изучили все идиомы в категории:\n{category_name}"
             else:
-                message = f"""
-📝 *Пока нет изученных идиом*
-
-В категории {category_name} пока нет изученных идиом.
-
-Начните изучение с команды /study!
-"""
+                message = f"📝 *Пока нет изученных идиом*\n\nВ категории {category_name} пока нет изученных идиом."
             
-            keyboard = [[InlineKeyboardButton("📁 Выбрать категорию", callback_data="change_category")]]
-            await query.edit_message_text(message, parse_mode='Markdown', 
-                                         reply_markup=InlineKeyboardMarkup(keyboard))
+            await query.edit_message_text(message, parse_mode='Markdown')
             return
         
         # Сохраняем данные
@@ -2050,8 +1931,6 @@ async def handle_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_direction'] = direction
         context.user_data['current_explanation'] = explanation
         context.user_data['current_choices'] = choices
-        context.user_data['current_category'] = category
-        context.user_data['current_category_name'] = CATEGORIES.get(category, 'Все категории')
         
         # Показываем иконку направления
         direction_icon = "🇬🇧 → 🇷🇺" if direction == "en_to_ru" else "🇷🇺 → 🇬🇧"
@@ -2069,10 +1948,8 @@ def main():
     print("🎓 Бот для изучения английских идиом")
     print("=" * 60)
     
-    # Проверяем наличие токена
     if not TOKEN:
         print("❌ ERROR: BOT_TOKEN not found!")
-        print("ℹ️ Please set BOT_TOKEN environment variable")
         return
     
     # Загружаем идиомы
@@ -2101,7 +1978,7 @@ def main():
         
         application.add_handler(CallbackQueryHandler(
             handle_continue,
-            pattern=r"^(continue_|change_category|show_stats|review_menu|study_menu)"
+            pattern=r"^(continue_|change_category)"
         ))
         
         application.add_handler(CallbackQueryHandler(
@@ -2114,13 +1991,13 @@ def main():
         print("📱 Перейдите в Telegram и начните с команды /start")
         print("=" * 60)
         
-        # ЗАПУСК БОТА - ВАЖНО!
+        # Запускаем бота
         application.run_polling()
         
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
         import traceback
         traceback.print_exc()
-# ============ ЗАПУСК ПРОГРАММЫ ============
+
 if __name__ == "__main__":
     main()
